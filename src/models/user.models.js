@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 const userSchema = new mongoose.Schema({
-    name: {
+    username: {
         type: String,
         required: true,
         unique: true,
@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
         // here we use the cloudinary url
         required: true
     },
-    coverimage : {
+    coverImage : {
         type: String,
         // URL to the user's cover image   
     },
@@ -57,7 +57,7 @@ userSchema.pre("save" , async function(next){
         return next();
     }
     this.password = await bcrypt.hash(this.password , 10);
-    next()
+    // next()
 })
 // always use next to pass the control to next middleware
 
@@ -72,7 +72,7 @@ userSchema.methods.generateAccessToken = function ()
         {
             _id : this._id,
             email : this.email,
-            name : this.name,
+            username : this.username,
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
@@ -87,7 +87,7 @@ userSchema.methods.generateRefreshToken = function()
         {
             _id : this._id,
             email : this.email,
-            name : this.name,
+            username : this.username,
         },
         process.env.REFRESH_TOKEN_SECRET,
         {
