@@ -19,8 +19,8 @@ const uploadToCloudinary= async (filePath)=>{
     }
     finally
     {
-        // console.log("Deleting:", filePath);
-        // fs.unlinkSync(filePath);
+        console.log("Deleting:", filePath);
+        fs.unlinkSync(filePath);
     }
 
 }
