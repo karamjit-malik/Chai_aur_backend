@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js"
 import { User } from "../models/user.models.js"
 import { uploadToCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import jwt from "jsonwebtoken"
 
 const registerUser = asyncHandler(async (req, res) => {
     //validation for not empty fields
@@ -64,6 +65,9 @@ const generateAccessandRefreshToken = async (userId) =>
         const user = await User.findById(userId)
         const AccessToken = user.generateAccessToken()
         const RefreshToken = user.generateRefreshToken()
+        console.log("ACCESS SECRET:", process.env.ACCESS_TOKEN_SECRET);
+        console.log("REFRESH SECRET:", process.env.REFRESH_TOKEN_SECRET);
+
         user.refreshToken = RefreshToken
         // validateBeforeSave ko false karne se password hashing aur dusre pre save hooks skip ho jayenge
         // kyunki yahan par hume password update nahi karna hai , sirf refresh token update karna hai
@@ -75,6 +79,7 @@ const generateAccessandRefreshToken = async (userId) =>
     }
     catch(err)
     {
+        console.log("TOKEN ERROR:", err);
         throw new ApiError("Token generation failed", 500)
     }
 }
@@ -92,7 +97,7 @@ const loginUser = asyncHandler(async (req, res)=>
     }
     const exists = await User.findOne({
         $or : [ {email : email} , {username : username} ]
-    })
+    }).select("+password +refreshToken") //yahan par +password isliye kiya hai kyunki by default password select nahi hota hai user model me
     if(!exists)
     {
         throw new ApiError('User not found with this email or username',404)
@@ -158,4 +163,53 @@ const logoutUser = asyncHandler(async (req, res) =>
         new ApiResponse({}, "User logged out successfully", 200)
     )
 })
-export {registerUser, loginUser , logoutUser}
+
+const refreshAccessToken = asyncHandler(async (req, res) =>
+{
+    //refresh token ke basis par new access token generate karna hai
+    //refresh token ko verify karna hai , aur database me stored refresh token se match karna hai
+    //agar valid hai to new access token generate karke send karna hai
+    const incommingRefreshToken = req.cookies.RefreshToken || req.body.RefreshToken || req.headers['x-refresh-token']
+    if(!incommingRefreshToken)
+    {
+        throw new ApiError("Refresh token is missing", 401)
+    }
+    try
+    {
+        const decoded = jwt.verify(incommingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+        if(!decoded || !decoded._id)
+        {
+            throw new ApiError("Invalid refresh token", 401)
+        }  
+        const userId = decoded._id
+        const user = await User.findById(userId).select("+refreshToken")
+        if(incommingRefreshToken !== user.refreshToken)
+        {
+            throw new ApiError("Refresh token does not match", 401)
+        }
+        const options = {
+            httpOnly : true,
+            secure : true
+        }
+        const {access , refresh} = await generateAccessandRefreshToken(userId)
+        return res
+        .status(200)
+        .cookie("AccessToken" , access , options)
+        .cookie("RefreshToken" , refresh , options)
+        .json(
+            new ApiResponse(
+                {
+                    AccessToken : access,
+                    RefreshToken : refresh
+                },
+                "Refresh token generated successfully",
+                200
+            )
+        )
+    }
+    catch (error) 
+    {
+        throw new ApiError(error.message || "Failed to refresh access token", 500)
+    }
+})
+export {registerUser, loginUser , logoutUser , refreshAccessToken}
